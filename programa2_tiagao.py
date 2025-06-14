@@ -1,100 +1,163 @@
 import itertools
+import multiprocessing
 from time import time
 from math import comb
 from collections import defaultdict
+import os
 
 # Comentarios gemini para entender, mas basicamente indexa subgrupos -> grupos de numeros que sao englobados
 # multithread
 # alto custo de processamenteo e memoria RAM
 
 # --- PARÂMETROS GERAIS DO PROBLEMA ---
-# Altere este valor para resolver para S14, S13, S12 ou S11 (Programas 2 a 5)
-K_SUBGRUPOS_A_COBRIR = 14  # Exemplo: 14 para o PROGRAMA 2 (cobrir S14)
+# Altere para 14, 13, 12 ou 11
+K_ALVO = 14
 
-UNIVERSO_TOTAL = set(range(1, 26))
+UNIVERSO_TOTAL = range(1, 26)
 N_UNIVERSO = 25
-K_APOSTA_S15 = 15
+K_APOSTA = 15
 CUSTO_POR_APOSTA = 3.00
 
-def resolver_cobertura_com_indice_invertido():
-    print("--- Iniciando a resolução com otimização de Índice Invertido ---")
+# --- ETAPA 1: CONSTRUÇÃO PARALELA DO ÍNDICE ---
+
+def construir_indice_parcial(lote_de_apostas):
+    """
+    Função "worker" para o multiprocessing. Cada processo executa esta função.
+    Cria um pedaço do índice invertido para um lote de apostas S15.
+    """
+    # defaultdict é como um array em PHP/TS que se inicializa sozinho.
+    # Se você tenta acessar uma chave que não existe, ele cria a chave com um valor padrão (aqui, uma lista vazia).
+    # Em TS: `const mapa = new Map<string, any[]>();` com lógica para inicializar.
+    mapa_parcial = defaultdict(list)
+    for aposta_s15 in lote_de_apostas:
+        for alvo_sk in itertools.combinations(aposta_s15, K_ALVO):
+            mapa_parcial[alvo_sk].append(aposta_s15)
+    return mapa_parcial
+
+def construir_indice_invertido_paralelo():
+    """
+    Orquestra a construção do índice usando todos os núcleos da CPU.
+    """
+    num_processos = os.cpu_count() or 1
+    print(f"ETAPA 1: Construindo Índice Invertido com {num_processos} processos...")
     
-    # 1. Gerar o universo a ser coberto (igual ao anterior)
-    universo_a_cobrir = {
-        comb 
-        for comb in itertools.combinations(UNIVERSO_TOTAL, K_SUBGRUPOS_A_COBRIR)
-    }
-    total_elementos_universo = len(universo_a_cobrir)
-    print(f"Universo Sk (k={K_SUBGRUPOS_A_COBRIR}) gerado com {total_elementos_universo:,} combinações.")
+    apostas_s15_gen = itertools.combinations(UNIVERSO_TOTAL, K_APOSTA)
+    
+    # Divide as 3.2M de apostas em lotes para cada processo
+    total_apostas = comb(N_UNIVERSO, K_APOSTA)
+    print(f"Total de apostas: {total_apostas}")
+    tamanho_lote = (total_apostas // num_processos) + 1
+    
+    lotes = []
+    lote_atual = []
+    for aposta in apostas_s15_gen:
+        lote_atual.append(aposta)
+        if len(lote_atual) == tamanho_lote:
+            lotes.append(lote_atual)
+            lote_atual = []
+    if lote_atual:
+        lotes.append(lote_atual)
 
-    # --- ETAPA LENTA E INTENSIVA DE MEMÓRIA: CONSTRUÇÃO DO ÍNDICE ---
-    print("Construindo o índice invertido (mapa Sk -> S15)... Esta etapa pode demorar.")
-    inicio_index = time()
+    # Inicia o processamento paralelo
+    with multiprocessing.Pool(processes=num_processos) as pool:
+        # `pool.map` distribui os lotes entre os processos e coleta os resultados
+        resultados_parciais = pool.map(construir_indice_parcial, lotes)
 
+    print("   ... Juntando os resultados parciais...")
+    # Junta os dicionários parciais em um único índice final
     mapa_sk_para_s15 = defaultdict(list)
-    contagem_cobertura_s15 = {} # Usaremos um dicionário como nosso contador de "pontos"
-
-    # Itera sobre todas as S15 para popular os mapas
-    for aposta_s15 in itertools.combinations(UNIVERSO_TOTAL, K_APOSTA_S15):
-        # Inicializa a contagem de cobertura para esta aposta
-        contagem_cobertura_s15[aposta_s15] = comb(K_APOSTA_S15, K_SUBGRUPOS_A_COBRIR)
-        # Popula o índice invertido
-        for sk in itertools.combinations(aposta_s15, K_SUBGRUPOS_A_COBRIR):
-            mapa_sk_para_s15[sk].append(aposta_s15)
+    for mapa_parcial in resultados_parciais:
+        for sk, lista_s15 in mapa_parcial.items():
+            mapa_sk_para_s15[sk].extend(lista_s15)
             
-    print(f"Índice construído em {time() - inicio_index:.2f}s.")
-    print("-" * 50)
-    
-    # --- NOVO LOOP GULOSO - MUITO MAIS RÁPIDO ---
-    cobertura_final = []
-    iteracao = 1
-    
-    while universo_a_cobrir:
-        inicio_iteracao = time()
+    return mapa_sk_para_s15
 
-        # 1. Encontrar a melhor aposta é agora uma busca pelo maior valor no dicionário de contagens
-        # Esta operação é muito mais rápida do que o laço 'for' de 3.2 milhões de itens
-        if not contagem_cobertura_s15: break # Segurança
-        melhor_aposta = max(contagem_cobertura_s15, key=contagem_cobertura_s15.get)
+def resolver_com_guloso_otimizado():
+    """
+    A implementação completa e otimizada do algoritmo guloso.
+    """
+    inicio_total = time()
+
+    # ETAPA 1: Construção do Índice
+    mapa_sk_para_s15 = construir_indice_invertido_paralelo()
+    print(f"Índice construído em {time() - inicio_total:.2f}s.\n")
+
+    # ETAPA 2: Preparação das estruturas de dados do loop
+    print("ETAPA 2: Preparando estruturas para o loop guloso (Buckets)...")
+    
+    universo_a_cobrir = set(mapa_sk_para_s15.keys())
+    total_alvos = len(universo_a_cobrir)
+    
+    # Estrutura de "Buckets" para acesso O(1) à melhor aposta
+    # `buckets[i]` conterá um `set` de todas as apostas que atualmente cobrem `i` alvos.
+    pontuacao_maxima = comb(K_APOSTA, K_ALVO)
+    buckets = [set() for _ in range(pontuacao_maxima + 1)]
+    
+    # Mapa para rastrear a pontuação atual de cada aposta
+    mapa_s15_para_pontuacao = {}
+    
+    apostas_s15_todas = list(itertools.combinations(UNIVERSO_TOTAL, K_APOSTA))
+    for aposta in apostas_s15_todas:
+        # No início, todas as apostas têm a pontuação máxima
+        buckets[pontuacao_maxima].add(aposta)
+        mapa_s15_para_pontuacao[aposta] = pontuacao_maxima
+    
+    print("Estruturas prontas.\n")
+
+    # ETAPA 3: Loop Guloso Otimizado com Buckets
+    print("Cobrindo o universo", total_alvos)
+    print("ETAPA 3: Iniciando o Loop Guloso Otimizado...")
+    
+    cobertura_final = []
+    pontuacao_atual = pontuacao_maxima
+
+    while universo_a_cobrir:
         
-        # Pega os elementos que serão cobertos por esta aposta
-        elementos_a_remover = {
-            sk for sk in itertools.combinations(melhor_aposta, K_SUBGRUPOS_A_COBRIR) 
-            if sk in universo_a_cobrir
-        }
+        # Encontra o bucket de maior pontuação que não está vazio
+        while not buckets[pontuacao_atual]:
+            pontuacao_atual -= 1
         
-        # 2. Adiciona à solução
+        # Pega qualquer aposta desse bucket (todas são igualmente "boas" neste passo)
+        melhor_aposta = buckets[pontuacao_atual].pop()
         cobertura_final.append(melhor_aposta)
 
-        # 3. ATUALIZAÇÃO: A parte mais inteligente
-        for sk_removido in elementos_a_remover:
-            # Para cada S15 que também cobria este sk_removido...
-            for s15_afetado in mapa_sk_para_s15[sk_removido]:
-                # ...sua contagem de cobertura diminui.
-                if s15_afetado in contagem_cobertura_s15:
-                    contagem_cobertura_s15[s15_afetado] -= 1
-        
-        # Remove a aposta escolhida do nosso conjunto de candidatos
-        del contagem_cobertura_s15[melhor_aposta]
-        
-        # Remove os elementos efetivamente cobertos do universo
-        universo_a_cobrir.difference_update(elementos_a_remover)
-        
-        # fim_iteracao = time()
-        # print(
-        #     f"Iteração {iteracao}: "
-        #     f"Adicionada aposta. "
-        #     f"Cobertos {len(elementos_a_remover)} novos elementos. "
-        #     f"Restantes: {len(universo_a_cobrir):,} / {total_elementos_universo:,}. "
-        #     f"Solução atual: {len(cobertura_final)} apostas. "
-        #     f"Tempo da iteração: {fim_iteracao - inicio_iteracao:.4f}s" # Note o .4f, o tempo será menor
-        # )
-        iteracao += 1
+        # Identifica os alvos que esta aposta cobre e que ainda não estavam na cobertura
+        alvos_cobertos_nesta_rodada = {
+            sk for sk in itertools.combinations(melhor_aposta, K_ALVO) if sk in universo_a_cobrir
+        }
 
-    # ... (O resto do código para imprimir o resultado final é o mesmo) ...
-    # ...
+        # Atualiza as pontuações de outras apostas que foram afetadas
+        for alvo_coberto in alvos_cobertos_nesta_rodada:
+            # Para cada S15 que também cobria este alvo...
+            for aposta_afetada in mapa_sk_para_s15[alvo_coberto]:
+                # Se a aposta afetada ainda está em jogo...
+                if aposta_afetada in mapa_s15_para_pontuacao:
+                    # ...move ela para um bucket de pontuação inferior.
+                    pontuacao_antiga = mapa_s15_para_pontuacao[aposta_afetada]
+                    buckets[pontuacao_antiga].discard(aposta_afetada)
+                    
+                    nova_pontuacao = pontuacao_antiga - 1
+                    buckets[nova_pontuacao].add(aposta_afetada)
+                    mapa_s15_para_pontuacao[aposta_afetada] = nova_pontuacao
+        
+        # Remove os alvos recém-cobertos do universo
+        universo_a_cobrir.difference_update(alvos_cobertos_nesta_rodada)
+        del mapa_s15_para_pontuacao[melhor_aposta] # Remove a aposta escolhida do jogo
+        
+
+    # Resultados Finais
+    fim_total = time()
+    print("\n" + "="*50)
+    print("Cobertura de Conjuntos Finalizada!")
+    print(f"O subconjunto SB{K_APOSTA}_{K_ALVO} encontrado contém {len(cobertura_final)} apostas.")
+    
+    custo_total = len(cobertura_final) * CUSTO_POR_APOSTA
+    print(f"Custo total para as {len(cobertura_final)} apostas: R$ {custo_total:,.2f}")
+    print(f"Tempo total de execução: {fim_total - inicio_total:.2f} segundos.")
+    print("="*50)
+
     return cobertura_final
 
-
-if __name__ == '__main__':
-    resolver_cobertura_com_indice_invertido()
+if __name__ == "__main__":
+    for i in resolver_com_guloso_otimizado():
+        print(i)
