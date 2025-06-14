@@ -2,6 +2,12 @@ from sb import sb_num
 import random
 import numpy as np
 
+
+def sequencia(comb):
+    primeiro = comb[0]
+    ultimo = comb[:1]
+
+
 #função para verificar se a combinação tem sequência maior que 3 elementos
 def tem_sequencia_longa(comb, min_tamanho=3):
     tamanho = 1
@@ -15,7 +21,7 @@ def tem_sequencia_longa(comb, min_tamanho=3):
     return tamanho_max >= min_tamanho
 
 # compara com lista combinacoes, se alguma for 80% igual, retorna True
-def compara_combinacoes(comb_set, combinacoes_sets, limiar_similaridade=0.8):
+def compara_combinacoes(comb_set, combinacoes_sets, limiar_similaridade=0.9):
     for c_set in combinacoes_sets:
         intersecao = len(comb_set & c_set)
         similaridade = intersecao / len(comb_set)
@@ -24,7 +30,7 @@ def compara_combinacoes(comb_set, combinacoes_sets, limiar_similaridade=0.8):
     return False
 
 # remove números muito próximos, que a média fique abaixo de um limite
-def distancia_media_baixa(comb, limite=6):
+def distancia_media_baixa(comb, limite=1):
     comb = sorted(comb)
     diffs = [comb[i+1] - comb[i] for i in range(len(comb)-1)]
     return np.mean(diffs) < limite
@@ -32,6 +38,8 @@ def distancia_media_baixa(comb, limite=6):
 
 sb15 = sb_num(3)
 sb14 = sb_num(2)
+
+#print(sb15, '\n',sb14)
 
 faltando_cobrir = set(tuple(sorted(c)) for c in sb14)
 subconjunto = []
@@ -67,3 +75,4 @@ while faltando_cobrir:
 
 
 print("Cobriu todos os subonjuntos?", not faltando_cobrir, "Subconjuntos escolhidos:", len(subconjunto))
+#print(subconjunto)
