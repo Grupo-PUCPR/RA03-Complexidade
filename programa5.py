@@ -4,50 +4,39 @@ from time import time
 from math import comb
 from collections import defaultdict
 import os
-import pickle  # Usaremos para salvar e carregar os dados nos arquivos
-import tempfile # Para gerenciar arquivos temporários de forma segura
+import pickle  
+import tempfile 
 
-
-# Comentarios gemini para entender, mas basicamente indexa subgrupos -> grupos de numeros que sao englobados
-# multithread
-# alto custo de processamenteo e memoria RAM
-
-# --- PARÂMETROS GERAIS DO PROBLEMA ---
-# Altere este valor para resolver para S14, S13, S12 ou S11 (Programas 2 a 5)
-
-# --- Suas constantes permanecem as mesmas ---
 K_ALVO = 11
 UNIVERSO_TOTAL = range(1, 26)
 N_UNIVERSO = 25
 K_APOSTA = 15
 CUSTO_POR_APOSTA = 3.00
 
-# --- NOVAS FUNÇÕES PARA SUBSTITUIR ---
-
 def construir_indice_parcial_em_disco(lote_de_apostas, nome_arquivo_saida):
     """
-    NOVA FUNÇÃO WORKER:
     Cria um pedaço do índice e o salva diretamente em um arquivo no disco,
     em vez de retorná-lo pela memória.
     """
-    mapa_parcial = defaultdict(list)
-    for aposta_s15 in lote_de_apostas:
-        for alvo_sk in itertools.combinations(aposta_s15, K_ALVO):
-            mapa_parcial[alvo_sk].append(aposta_s15)
+    mapa_parcial = defaultdict(list) #O(1)
+    for aposta_s15 in lote_de_apostas: #O(n)
+        for alvo_sk in itertools.combinations(aposta_s15, K_ALVO):#O(C(m,k)) -> m tamanho de cada aposta | k = tamanho do sb alvo
+            mapa_parcial[alvo_sk].append(aposta_s15)#O(1)
     
-    # Usa o módulo 'pickle' para serializar e salvar o dicionário no arquivo.
-    with open(nome_arquivo_saida, 'wb') as f:
-        pickle.dump(mapa_parcial, f)
+    #'pickle' para serializar e salvar o dicionário no arquivo.
+    with open(nome_arquivo_saida, 'wb') as f: #O(1)
+        pickle.dump(mapa_parcial, f) #O(1)
     
-    return nome_arquivo_saida # Retorna apenas o nome do arquivo criado
+    return nome_arquivo_saida #retorna apenas o nome do arquivo criado
 
+
+#Complexidade geral: O(C(N,K)⋅C(m,k)) -> N=universo | K=sb aposta | m=K | k=sb alvo
 def construir_indice_invertido_paralelo_com_disco():
     """
-    NOVO ORQUESTRADOR:
     Gerencia os workers para que salvem os resultados em disco e depois
     junta os resultados lendo os arquivos um a um.
     """
-    # Mesmo com muita RAM, é prudente limitar os processos para evitar sobrecarga geral.
+    # msm com bastante RAM, tem que limitar o n de processos.
     num_processos = max(1, os.cpu_count() - 2) if os.cpu_count() else 1
     print(f"ETAPA 1: Construindo Índice com {num_processos} processos (MODO SEGURO DE MEMÓRIA - DISCO)...")
 
@@ -66,39 +55,43 @@ def construir_indice_invertido_paralelo_com_disco():
     diretorio_temporario = tempfile.mkdtemp()
     print(f"   ... Arquivos de índice temporários serão salvos em: {diretorio_temporario}")
 
-    for aposta in apostas_s15_gen:
-        lote_atual.append(aposta)
+    for aposta in apostas_s15_gen: #O(C(m,k)) -> m=tamanho de cada aposta | k=tamanho do sb alvo
+        lote_atual.append(aposta) #O(1)
         if len(lote_atual) == tamanho_lote:
             nome_arquivo = os.path.join(diretorio_temporario, f"indice_parcial_{processo_id}.pkl")
-            argumentos_pool.append((lote_atual, nome_arquivo))
-            lote_atual = []
-            processo_id += 1
-    if lote_atual:
-        nome_arquivo = os.path.join(diretorio_temporario, f"indice_parcial_{processo_id}.pkl")
-        argumentos_pool.append((lote_atual, nome_arquivo))
+            argumentos_pool.append((lote_atual, nome_arquivo))#O(1)
+            lote_atual = [] #O(1)
+            processo_id += 1 #O(1)
+    if lote_atual: 
+        nome_arquivo = os.path.join(diretorio_temporario, f"indice_parcial_{processo_id}.pkl") #O(1)
+        argumentos_pool.append((lote_atual, nome_arquivo)) #O(1)
 
     # Inicia o processamento paralelo
+    #Complexidade do multiprocesso: O(C(N,K)⋅C(m,k)) 
     with multiprocessing.Pool(processes=num_processos) as pool:
         # starmap é usado quando a função worker tem múltiplos argumentos
         nomes_arquivos_criados = pool.starmap(construir_indice_parcial_em_disco, argumentos_pool)
+        #Complexidade de cada processo O(l.C(m,k))-> l=tamanho do lote
 
     print(f"   ... {len(nomes_arquivos_criados)} arquivos de índice parciais foram criados.")
     print("   ... Juntando os resultados a partir dos arquivos (isso pode levar um tempo)...")
 
     # Junta os resultados LENDO UM ARQUIVO DE CADA VEZ
-    mapa_sk_para_s15 = defaultdict(list)
-    for nome_arquivo in nomes_arquivos_criados:
+    mapa_sk_para_s15 = defaultdict(list) #O(1)
+    #Complexidade geral: O(C(N,k).C(m,k))
+    for nome_arquivo in nomes_arquivos_criados: #O(C(N,k))
         with open(nome_arquivo, 'rb') as f:
-            mapa_parcial = pickle.load(f)
-            for sk, lista_s15 in mapa_parcial.items():
-                mapa_sk_para_s15[sk].extend(lista_s15)
+            mapa_parcial = pickle.load(f) #O(1)
+            for sk, lista_s15 in mapa_parcial.items(): #O(C(m,k))
+                mapa_sk_para_s15[sk].extend(lista_s15)#O(1)
         # Remove o arquivo temporário após o uso para economizar espaço em disco
-        os.remove(nome_arquivo)
+        os.remove(nome_arquivo)#O(1)
     
     # Remove o diretório temporário
-    os.rmdir(diretorio_temporario)
+    os.rmdir(diretorio_temporario)#O(1)
 
     return mapa_sk_para_s15
+
 
 def resolver_com_guloso_otimizado():
     """
@@ -140,10 +133,10 @@ def resolver_com_guloso_otimizado():
     pontuacao_atual = pontuacao_maxima
     iteracao = 1
 
-    while universo_a_cobrir:
+    while universo_a_cobrir: #C(N,k)
         
         # Encontra o bucket de maior pontuação que não está vazio
-        while not buckets[pontuacao_atual]:
+        while not buckets[pontuacao_atual]: #C(K,k)
             pontuacao_atual -= 1
         
         # Pega qualquer aposta desse bucket (todas são igualmente "boas" neste passo)
@@ -154,11 +147,13 @@ def resolver_com_guloso_otimizado():
         alvos_cobertos_nesta_rodada = {
             sk for sk in itertools.combinations(melhor_aposta, K_ALVO) if sk in universo_a_cobrir
         }
+        #O(C(K,k)) - for | O(C(K, k)) - if
 
         # Atualiza as pontuações de outras apostas que foram afetadas
-        for alvo_coberto in alvos_cobertos_nesta_rodada:
+        #No geral, O(C(K,K)²)
+        for alvo_coberto in alvos_cobertos_nesta_rodada: #O(C(K,k))
             # Para cada S15 que também cobria este alvo...
-            for aposta_afetada in mapa_sk_para_s15[alvo_coberto]:
+            for aposta_afetada in mapa_sk_para_s15[alvo_coberto]:#O(A_sk) -> A_sk sendo a média de apostas que foram cobertas, no pior caso o A_sk é C(K,k)
                 # Se a aposta afetada ainda está em jogo...
                 if aposta_afetada in mapa_s15_para_pontuacao:
                     # ...move ela para um bucket de pontuação inferior.

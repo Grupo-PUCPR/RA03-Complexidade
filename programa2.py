@@ -111,9 +111,10 @@ def resolver_com_guloso_otimizado():
         }
         
 
-        #No geral: O(C(K,k). A_sk)
+        #No geral: O(C(K,k)²) -> ou seja O(C(K,k) . C(K,k))  
         for alvo_coberto in alvos_cobertos_nesta_rodada: #O(C(K,k))
             for aposta_afetada in mapa_sk_para_s15[alvo_coberto]:#O(A_sk) -> A_sk = média de apostas que foram cobertas
+                #no pior caso, o A_sk é C(K,k)
                 if aposta_afetada in mapa_s15_para_pontuacao: #O(1)
                     pontuacao_antiga = mapa_s15_para_pontuacao[aposta_afetada]#O(1)
                     buckets[pontuacao_antiga].discard(aposta_afetada)#O(1)
@@ -127,17 +128,17 @@ def resolver_com_guloso_otimizado():
         
 
     # Resultados Finais
-    fim_total = time()
-    print("\n" + "="*50)
-    print("Cobertura de Conjuntos Finalizada!")
-    print(f"O subconjunto SB{K_APOSTA}_{K_ALVO} encontrado contém {len(cobertura_final)} apostas.")
+    fim_total = time() #O(1)
+    print("\n" + "="*50) #O(1)
+    print("Cobertura de Conjuntos Finalizada!") #O(1)
+    print(f"O subconjunto SB{K_APOSTA}_{K_ALVO} encontrado contém {len(cobertura_final)} apostas.") #O(1)
     
-    custo_total = len(cobertura_final) * CUSTO_POR_APOSTA
-    print(f"Custo total para as {len(cobertura_final)} apostas: R$ {custo_total:,.2f}")
-    print(f"Tempo total de execução: {fim_total - inicio_total:.2f} segundos.")
+    custo_total = len(cobertura_final) * CUSTO_POR_APOSTA #O(1)
+    print(f"Custo total para as {len(cobertura_final)} apostas: R$ {custo_total:,.2f}") #O(1)
+    print(f"Tempo total de execução: {fim_total - inicio_total:.2f} segundos.") #O(1)
     print("="*50)
 
-    return cobertura_final
+    return cobertura_final #O(1)
 
 if __name__ == "__main__":
     for i in resolver_com_guloso_otimizado():

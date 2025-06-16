@@ -5,29 +5,19 @@ from math import comb
 from collections import defaultdict
 import os
 
-# Comentarios gemini para entender, mas basicamente indexa subgrupos -> grupos de numeros que sao englobados
-# multithread
-# alto custo de processamenteo e memoria RAM
-
-# --- PARÂMETROS GERAIS DO PROBLEMA ---
-# Altere para 14, 13, 12 ou 11
 K_ALVO = 13
-
 UNIVERSO_TOTAL = range(1, 26)
 N_UNIVERSO = 25
 K_APOSTA = 15
 CUSTO_POR_APOSTA = 3.00
 
 # --- ETAPA 1: CONSTRUÇÃO PARALELA DO ÍNDICE ---
-
 def construir_indice_parcial(lote_de_apostas):
     """
     Função "worker" para o multiprocessing. Cada processo executa esta função.
     Cria um pedaço do índice invertido para um lote de apostas S15.
     """
-    # defaultdict é como um array em PHP/TS que se inicializa sozinho.
     # Se você tenta acessar uma chave que não existe, ele cria a chave com um valor padrão (aqui, uma lista vazia).
-    # Em TS: `const mapa = new Map<string, any[]>();` com lógica para inicializar.
     mapa_parcial = defaultdict(list)
     for aposta_s15 in lote_de_apostas:
         for alvo_sk in itertools.combinations(aposta_s15, K_ALVO):
@@ -36,8 +26,9 @@ def construir_indice_parcial(lote_de_apostas):
 
 def construir_indice_invertido_paralelo():
     """
-    Orquestra a construção do índice usando todos os núcleos da CPU.
+    Coordena a construção do índice usando todos os núcleos da CPU.
     """
+
     num_processos = os.cpu_count() or 1
     print(f"ETAPA 1: Construindo Índice Invertido com {num_processos} processos...")
     
@@ -117,7 +108,7 @@ def resolver_com_guloso_otimizado():
         while not buckets[pontuacao_atual]:
             pontuacao_atual -= 1
         
-        # Pega qualquer aposta desse bucket (todas são igualmente "boas" neste passo)
+        # Pega "qualquer aposta"(é deterministico) desse bucket (todas são igualmente "boas" neste passo)
         melhor_aposta = buckets[pontuacao_atual].pop()
         cobertura_final.append(melhor_aposta)
 
